@@ -1,0 +1,160 @@
+\documentclass[a4paper, 12pt]{report}
+\usepackage[english]{babel}
+%\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{listings}
+\usepackage[centertags]{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{newlfont}
+\usepackage{fancyhdr}
+\usepackage{tesisty}
+\usepackage{hyperref}
+\usepackage[utf8x]{inputenc}
+\usepackage[toc,page]{appendix}
+\usepackage[ruled,vlined]{algorithm2e}
+\usepackage{algpseudocode}
+
+
+
+\lstset{basicstyle=\small\sffamily,
+  numbers=none,
+  frame=tb,
+  columns=fullflexible,
+  showstringspaces=false,
+  breaklines=true
+}
+
+
+
+%-------------------------------
+% DEFINIZIONE DEGLI ENVIRONMENT
+%-------------------------------
+
+\newtheorem{obs}{Osservazione}[section]
+\newenvironment{oss}
+    {\begin{obs}\begin{normalfont}}
+    {\hfill $\square \!\!\!\!\checkmark$ \end{normalfont}\end{obs}}
+
+\newtheorem{pro}{Problema}[chapter]
+\newenvironment{prob}
+    {\begin{pro}\begin{normalfont}}
+    {\hfill $\spadesuit$ \end{normalfont}\end{pro}}
+
+\newtheorem{teor}{Teorema}[section]
+\newenvironment{teorema}
+    {\begin{teor}\textit }
+    {\hfill  \end{teor}}
+
+\newtheorem{defn}{Definizione}[section]
+\newenvironment{de}
+    {\begin{defn}\begin{normalfont}}
+    {\hfill $\clubsuit$ \end{normalfont}\end{defn}}
+
+%-----------------------------
+% CONFIGURAZIONE DELLA PAGINA
+%-----------------------------
+
+\hfuzz2pt % Don't bother to report over-full boxes if over-edge is < 2pt
+
+\numberwithin{equation}{section}
+\renewcommand{\theequation}{\thesection.\arabic{equation}}
+
+\setlength{\parindent}{0pt}
+
+
+%--------------------------
+% MODIFICARE DA QUI IN POI
+%--------------------------
+
+\begin{document}
+
+\dedicate{Inserire la dedica}
+
+\corso{INFORMATICA} \titoloRelazione{\textbf{Vimond Analytics Platform}} 
+\relatore{Valeria Cardellini}
+\anno{A.A 2012/2013}
+ \autore{Luzzi Matteo Remo}
+ \correlatore{Glenn Skare Pedersenn}
+
+
+
+\baselineskip=25pt
+
+\intestazione
+
+%------------------------------------------------
+% INTRODUZIONE E RINGRAZIAMENTI (NON MODIFICARE)
+%------------------------------------------------
+
+\fancypagestyle{plain}{
+\fancyhead{}\renewcommand{\headrulewidth}{0pt} } \pagestyle{fancy}
+\renewcommand{\chaptermark}[1]{\markboth{\small Cap. \thechapter \textit{ #1}} {} }
+\renewcommand{\sectionmark}[1]{\markright{\small  \thesection \textit{ #1}} {} }
+\voffset=-20pt                         % distanza tra il limite superiore del foglio e l'intestazione
+\headsep=40pt                          % distanza  l'intestazione ed il testo del corpo
+\hoffset=0pt                           % misura equivalente al margine sinistro
+\textheight=620pt                      % altezza del corpo del testo
+\textwidth=435pt                       % larghezza del corpo del testo
+\footskip=40pt                         % distanza tra il testo del corpo ed il pie' di pagina
+\fancyhead{}                           % cancella qualsiasi impostazione per l'intestazione
+\fancyfoot{}                           % cancella qualsiasi impostazione per il pie' di pagina
+\headwidth=435pt                       % larghezza del'intestazione e del pie' di pagina
+\fancyhead[R]{\rightmark} \fancyfoot[L]{\leftmark}
+\fancyfoot[R]{\thepage}
+\renewcommand{\headrulewidth}{0.3pt}   % spessore della linea dell'intestazione
+\renewcommand{\footrulewidth}{0.3pt}   % spessore della linea del pi�di pagina
+
+\pagenumbering{Roman} \tableofcontents
+\newpage
+
+\pagenumbering{arabic}
+
+\fancyhead[R]{Introduction} \fancyfoot[L]{Introduction}
+\fancyfoot[R]{\thepage}
+
+\include{acknowledgement}
+\include{introduction}
+
+\fancyhf{} %elimina header/footer vecchi
+
+\fancyhead[R]{Chapter \thechapter} \fancyhead[L]{\leftmark}
+\fancyfoot[R]{\thepage}
+
+
+
+
+
+%---------------------
+% INCLUSIONE CAPITOLI
+%---------------------
+
+\include{chapter1}
+\include{chapter2}
+\include{chapter3}
+\include{chapter4}
+\appendix
+\include{appendix}
+
+
+
+
+
+% ELENCO DELLE FIGURE (OPZIONALE)
+\addcontentsline{toc}{chapter}{List of Figures}
+\listoffigures
+
+
+% BIBLIOGRAFIA
+\addcontentsline{toc}{chapter}{Bibliography}
+\begin{thebibliography}{9}
+        \bibitem{bib1}B. Urgaonkar ,
+G. Pacifici , P. Shenoy , M. Spreitzer , A. Tantawi,
+            \emph{``“An analytical model for multi­tier internet services and its applications''}
+        \bibitem{bib2} Giuseppe Iazeolla, 
+            \emph{``Impianti Reti Sistemi Informatici''},
+\end{thebibliography}
+\end{document}
