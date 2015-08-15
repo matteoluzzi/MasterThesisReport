@@ -1,13 +1,57 @@
 \chapter{Big Data tools}
 \label{chap:chapter2}
-
+In this chapeter we will describe the tools used for implementing a working prototype based on the lambda architecture paradigm previously explained. The scope of this thesis is not to make a survey of modern tecnologies used for big data and here we will give just an overview highliting  just the purpose and the main feature of each used tool. In the appendix the basic configurations for each tool are showed. For a better understaning of these tools, the reader is invited to read more resources about them.
 \section{Kafka}
+Apache Kafka \cite{bib19} is a general purpose distributed publish-subscribe message system originally developed at Linkedin and then opensourced in 2011 and inserted in the Apache ecosystem. The architecture is composed by one or more kafka servers, also known as \textit{brokers}, which rely on Apache Zookeeper for coordinations.\\
+The key abstraction in Kafka is a topic: \textit{producers} publish message to a topic and \textit{consumers} subscribe to one or more topics. A single topic is composed by a set of partitions, distributed and replicated among all the brokers in the cluster. For each partition there is a primary replica and a set of slaves. Since normally there are more partitions than brokers, a broker can play the role of master some partitions and the role of slave for others. On each partition are stored metadata about the position consumer subscribed to that topic, also called offsets. An offset represents a checkpoint for that consumer, messages till that point are assumed to be correctly processed and the next time the consumer makes a fetch request, the broker will forward messages starting from that offset. The consumer, anyway, is still able to reprocess already committed messages for instance in response to a failover event.\\
+ What it is interesting in Kafka is how messages are forwarded from the producer to the consumer thought the brokers. Unlike other message systems which process the messages in-memory, Kafka does a strong usage of the filesystem: messages are immediately stored on filesystem and not deleted when read by a consumer but retained according to a configurable period. This avoid any kind of data loss for every commited message, even in case of brokers failure. The only information retained by the broker is the position of the cosumer for that topic (which are the offsets for the partitions the topic is composed by). \\
+Kafka allows to implement either a \textit{queing} or a \textit{publish-subscribe} logic introducing the abstraction of \textbf{consumer group}.
+Each consumer labels itself with a consumer group name and is it responsible for one or more partition of a topic. Kakfa ensures than no more than one consumer per group reads from a partition: if in the group there are more consumers than partition, some of them will stay idle. On the opposite, a consumer will read from more than one partition.
+If all the consumers belong to the same group, then the system works as a queue, balancing the load across the consumer group. If all the consumers have different group, then the system works as a standard publish-subscribe.\\
+Having the concept of the consumer group implies a total order over messages within each partition: the order on how are messages are read inside a partition is the same for every consumer who subscribed that partition.\\
+As a conclusion, is worthy mention that Kafka implements a \textit{at-least-once} message semantic in the following way:
+\begin{itemize}
+\item Producer: when publishing a message and having a network error, the producer can't be sure if the message has been correctly committed to the broker
+\item Consumer: a message is said to be fully processed (from a broker perspective) only when its offset has been committed. The best the consumer can do is, read the message, process it and then commit the offset. If the consumer crashes  before committing the offset but after processing the message, the one taking over will read the same message.
+\end{itemize}
+With this observation in mind, is it a duty of the application to be idempotent.
 
 \section{Hadoop}
 \subsection{HDFS}
-
-\section{Storm}
+\subsection{Oozie}
+Apache oozie\cite{bib20} is a workflow schduler for Hadoop. Each workflow is composed by a sequence of action executed in sequential mode, which means that an action can't be executed until the previous one ended. The architecture of oozie is quite simple: (give architecture explaination).
+For installing and configuring oozie the reader can go to \ref{appendix}
+Oozie workflow are build on a DAG (direct acyclic graph) stucture and are composed by a sequenct two possible type of \textit{nodes}:
+\begin{itemize}
+\item control flow: nodes that control the start, the end and the execution of the workflow without executing any concrete action. Example of this nodes are: start control node, end control node, kill control node, fork control node.
+\item action: nodes that execute a task. The actions supported by the latest version (4.2.0 July 2015) are Map-Reduce, Pig, Java, Fs (filesystem), ssh, Spark	 
+\end{itemize}
 
 \section{Spark}
+Apache Spark is a distributed framework for data computing. It is based on the same paradigm of Hadoop/Map-Reduce, where the computation is split across several nodes in the cluster (\textit{map}) and the final result is given by aggregating the intermediate ones (\textit{reduce}). Spark has been designed for the class of applications which need to iterate several time on the same dataset, such as machine learning and interactive analytics, such that it is possible to store intermetiate data in memory instead of recompute it at every step. For these type of application, it has been showed how spark outperforms a classic map-reduce paradigm by 10 times \cite{bib21}.\\
+To be run in a distibuted mode, Spark needs a cluster manager for resources allocation across all the nodes. The architecture is composed by a primary node called \textit{driver program} and a set of worker nodes running 	\textit{executor} threads. When an application is submitted to the cluster, the driver program spreads it across the worker nodes and schedules task to be run by each executor in a isolate context (each executor runs its own JVM). In this way there is complete isoltation between several applications running on the same cluster, the drawback is that executors beloning to different applications can't share data between themselves and also within the same application they need the support of the driver program for sharing data using special objects such as \textit{broadcast} and \textit{accumulator} variables.
+
+\begin{figure}[h]
+        \centering
+        \includegraphics[width=12cm]{imgs/spark-architecture}
+\caption[Caption for LOF]{Spark cluster architecture\protect\footnotemark}
+        \label{spark-1}
+\end{figure}
+\footnotetext{https://spark.apache.org/docs/latest/cluster-overview.htmld}
+The main concept around spark is an abstraction over a phisical dataset called \textit{RDD} \cite{bib22} (resilient distributed dataset). RDDs are read-only, fault-tolerant parallel datastructures divided into one or more partition across a set of machines. They can be created from phisycal files, parallelizing a collection of elements or trasforming an existing RDD by applying a transformation (ex. map, filter...) or an action (ex reduce, count...). RDD are lazy by nature, in the sense that the driver program keeps in memory the list of transformations needed to compute it rather than execute them at each step. Only when an action requires the RDD to be returned to the driver program, the list of transformations is applied. By default, each transformed RDD is recalculated each time an action runs on it. It is possilble however, to cache in memory for faster successive accesses to it. This abstraction increases the robustness of the data model: in case of a partition failure, it can be reconstructed by applying the list of transformations and actions from the last RDD available in memory.
+
+\section{Storm}
+Apache Storm is a distributed real-time data processing framework created by Nathan Marz (the proposer of lambda architecture). Storm considers the data as a stream of \textit{Tuple}, generated in special component called \textit{spouts} and processed by one or more \textit{bolt}.\\ Spouts and bolt can be combined in a direct graph structure called \textit{topology}. \\
+A Storm cluster is composed by a master node and one ore more worker nodes. The master node runs a process called \textit{Nimbus}: it is where the application submitted to the cluster and it is responsible for distributing the code, assign taks and check for failures. The worker nodes run one or more processes called \textit{supervisor} in charge of communication with the master and of executing worker processes . Each worker process runs different parts of the topology in \textit{tasks}. The master node communicates with the workers thought  a \textit{Zookepeer} cluster.
+\begin{figure}[h]
+        \centering
+        \includegraphics[width=10cm]{imgs/storm-architecture}
+\caption[Caption for LOF]{Storm cluster architecture\protect\footnotemark}
+        \label{storm-1}
+\end{figure}
+\footnotetext{https://storm.apache.org/documentation/Tutorial.html}
+Each component (spout or bolt) can be replicated for load distibution. Whitin a worker process it is possible to run one or more \textit{executor}, each \textit{executor} finally runs one or more taks, with are just parts of the topology belonging to the same component.
+As stated before, the main abstraction in storm the stream of Tuple. Data flows from a component to the next one according to a partition policy: data can be distributed in shuffle mode, by a key, toward a unique component or replicated. Each mode fullfils a different use case: for instance a key-partition (\textit{fileds grouping}) is usefull when we want to count the occurrency of a particular element in the data stream while a shuffle partition(\textit{shuffle grouping}) is a better approach when the same operation has to be performed on each tuple, independently of the actual content of the tuple itself.\\
+Storm guarantess by default a \textit{at-least-once} message processing semantic. A topology can be launched with one ackers component, responsible of ensuring that a tuple is successfully processed within a timeout. Storm keeps in memory a tree DAG for each tuple generated by a spout: each node in the DAG reprents a componend which is supposed to process the tuple and sends an ack after doing it. If the acker receives all the acks for a tuple then that tuple is said to be fully processed, otherwise the tuple is considered failed and the spout resposible for it should be able to regenerate it. In this way no data loss is guaranteed, but is a tuple is failed because of the timeout, then it is reprocessed twice. As said for Kafka, is a duty of the application logic to be idempotent to such events.
 
 \section{Elasticsearch}

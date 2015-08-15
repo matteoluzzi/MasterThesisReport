@@ -1,0 +1,65 @@
+\chapter*{Appendix A\\ Framework configurations}
+\label{appendix}
+In this section we are going to report the followed procedures for installing and setting up the frameworks used in this thesis work.
+\section{Apache Oozie}
+
+The version used for this project is the 4.2.0 (stable version - June 2015). The procedure for the installation is not trivial, as you need to build a working distro from source code.
+Prerequisites:
+\begin{itemize}
+\item Java 1.6+
+\item Apache Hadoop
+\item Apache Maven
+\item ext-2.2
+\end{itemize}
+Java 1.8, hadoop 2.7.0 and maven 3.3.3 were used during the installation procedure.\\
+It is assumed also that hadoop is running using the default ports setting
+\subsection{Installation\protect\footnote{At the time of installation I came across a bug due to a repository out of service. Refer to \cite{bib3} for its solution}}
+\begin{lstlisting}[language=sh]
+#donwload the tarball from a mirror
+cd ~
+wget http://apache.uib.no/oozie/4.2.0/oozie-4.2.0.tar.gz 
+tar -xvf oozie-4.2.0.tar.gz
+
+#build a distro according to your java version and hadoop version
+cd oozie-4.2.0/bin
+./mkdistro -DtargetJavaVersion=1.8 -P hadoop-2 -Dhadoop.version=2.7.0 
+
+#configure the distro
+cd distro/target/oozie-4.2.0
+mkdir libext
+mv /path/to/ext-2.2.zip libext
+bin/oozie-setup.sh sharelib create -fs hdfs://localhost:9000
+bin/oozie-setup.sh prepare-war
+bin/ooziedb.sh create -sqlfile oozie.sql -run
+bin/oozied.sh start
+\end{lstlisting}
+
+In order to set up the integration with hadoop, the following properties need to be defined:
+
+\begin{lstlisting}[language=XML]
+<!-- oozie-site.xml -->
+<property>
+    <name>oozie.service.HadoopAccessorService.hadoop.configurations</name>
+	<value>*=/path/to/hadoop-2.7.0/etc/hadoop</value>
+</property>
+<property>
+     <name>oozie.service.WorkflowAppService.system.libpath</name>
+     <value>hdfs:///user/${user.name}/share/lib</value>
+</property>
+
+<!-- hadoop core-site.xml -->
+<property>
+      <name>hadoop.proxyuser.myhadoopusername.hosts</name>
+      <value>*</value>
+</property>
+<property>
+      <name>hadoop.proxyuser.myhadoopusername.groups</name>es
+      <value>*</value>
+</property>
+
+\end{lstlisting}
+
+Once oozie is started, is it possible to control the job executions via web interface at $localhost:11000$
+
+
+ 
