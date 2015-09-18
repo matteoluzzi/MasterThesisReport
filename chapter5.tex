@@ -1,2 +1,18 @@
 \chapter{Results and Tests}
 \label{chapt:chapter5}
+
+\section{Monitoring the system}
+In order to monitor the system and get statistics about usage indices of each layer such as throughtput and latency it has been user the library \textit{dropwizard-metrics} \footnote{http://dropwizard.github.io/metrics} (formerly \textit{codahale metrics}). This library allows to define different type of metrics for couting the ratio of a certain event or the execution time of a function- Each metric refers to a \textit{MetricRegistry} object which accumulates all the received data and publish them using one or more \textit{Reporter}. Example of supported reporter are \textit{CSVReporter}, \textit{HTTPReporter} and \textit{GraphiteReporter}. For our purposes it has been used a \textit{CSVReporter} which append the report for a configurable timewindow to  CSV file. 
+\subsection{RealTime Layer}
+In order to monitor Storm topology we are interested in two metrics:
+\begin{itemize}
+\item throughput of each component
+\item latency of a tuple, i.e. the time each message spends into the topology, from the moment it is emitted by the spout till the moment it is processed by the last bolt.
+\end{itemize}
+Concerning the thoughput of each component, it is easy to meausure it as the number of times
+
+\section{Testing VimondAnalytics}
+In this section we are going to show the results of the tests made on a working implementation running on AWS. When not mentioned, the settings and the virtual machine configurations are the same of the ones indicated in section...\\
+
+\subsection{Tests metodologies}
+firehose throttled

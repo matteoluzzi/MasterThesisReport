@@ -8,13 +8,15 @@
 \usepackage{amsfonts}
 \usepackage{amssymb}
 \usepackage{amsmath}
+\usepackage{rotating}
 \usepackage{amsthm}
 \usepackage{newlfont}
 \usepackage{fancyhdr}
 \usepackage{tesisty}
 \usepackage{hyperref}
+\usepackage{minted}
+\usepackage[ruled,vlined]{algorithm2e}
 \usepackage[utf8x]{inputenc}
-
 
 
 \usepackage[toc,page]{appendix}
@@ -75,13 +77,13 @@
 
 \begin{document}
 
-\dedicate{Inserire la dedica}
+%\dedicate{Not all those who wander are lost - J.R.R. Tolkien}
 
-\corso{INFORMATICA} \titoloRelazione{\textbf{A lambda architecture based solution for analytics}} 
+\corso{INFORMATICA} \titoloRelazione{\textbf{A lambda architecture based solution for analytics [provvisorio]}} 
 \relatore{Valeria Cardellini}
 \anno{A.A 2014/2015}
  \autore{Luzzi Matteo Remo}
- \correlatore{Glenn Skare Pedersenn}
+ \correlatore{Glenn Skare Pedersenn\\Thomas Aalén}
 
 
 
@@ -141,8 +143,8 @@
 \include{chapter4}
 \include{chapter5}
 \include{chapter6}
-\appendix
-\include{appendix}
+%\appendix
+%\include{appendix}
 
 
 
@@ -157,36 +159,60 @@
 \addcontentsline{toc}{chapter}{Bibliography}
 \begin{thebibliography}{9}
   \bibitem{bib10}Google trends
-            \emph{``http://www.google.com/trends/explore\#q=big\%20data'} (website)
+            \emph{"http://www.google.com/trends/explore\#q=big\%20data'} (website)
              \bibitem{bib11}Ward J. S., Barker A.
-            \emph{``Undefined by data: A survey of Big Data Definitions'} (website)
-        \bibitem{bib1}Vimond Media Solution
-            \emph{``http://www.vimond.com''} (website)
+            \emph{"Undefined by data: A survey of Big Data Definitions'} (paper)
+            \bibitem{bib12}Laney D.
+            \emph{"3D Data Management: Controlling Data Volume, Velocity, and Variety'} 2001 (report)
+            \bibitem{bib13} Cooper, A
+            \emph{"A Brief History of Analytics'} JISC CETIS Analytics Series, Vol. 1, No. 9. (report)
+             \bibitem{bib14} Fourie, I.,  Bothma, T
+            \emph{"Information seeking: an overview of web tracking and the criteria for tracking software'} Aslib Proceedings 2007 (paper)
+             \bibitem{bib15} Russom P.
+            \emph{"Big Data Analytics'} TDWI best practices report 2011 (report)
+             \bibitem{bib16} Glass K., Colbaugh R.
+            \emph{"Web Analytics for Security Informatics'} (paper)
+             \bibitem{bib17} McKinsley Global Institute
+            \emph{"Big data: The next frontier for innovation, competition, and productivity"} 2011 (report)
+            \bibitem{bib18}Garber L.
+            \emph{"Using In-Memory Analytics to Quickly Crunch Big Data"} 2012 (report)
+            \bibitem{bib26}Cugola L., Margara A.
+            \emph{"Processing Flows of Information: From Data Stream to Complex Event Processing"} 2012 (paper) 
+            \bibitem{bib27}Web Analytics Association
+            \emph{"Web Analytics Definitions"} 2008 (report) 
+          \bibitem{bib1}Vimond Media Solution
+            \emph{"http://www.vimond.com''} (website)
         \bibitem{bib2} Nathan Martz,
-            \emph{``How to beat the cap theorem''} (blog article)
+            \emph{"How to beat the cap theorem''} (blog article)
             http://nathanmarz.com/blog/how-to-beat-the-cap-theorem.html
          \bibitem{bib3} BIGTOP-1875, 
-            \emph{``https://issues.apache.org/jira/browse/BIGTOP-1875''}
+            \emph{"https://issues.apache.org/jira/browse/BIGTOP-1875''}
              \bibitem{bib4} Martz Nathan, Warren James
-            \emph{``Big Data: Principles and Best Practices of Scalable Realtime Data Systems'}
+            \emph{"Big Data: Principles and Best Practices of Scalable Realtime Data Systems'}
             Manning, 2015 (book)
              \bibitem{bib5}Gilbert Seth, Lynch Nancy:
-            \emph{``Brewer’s Conjecture and the Feasibility of Consistent, Available, Partition-Tolerant Web Services'} 2002 (paper)
+            \emph{"Brewer’s Conjecture and the Feasibility of Consistent, Available, Partition-Tolerant Web Services'} 2002 (paper)
             \bibitem{bib6} Heule Stefan, Nunkesser Marc, Hall Alexander:
-            \emph{``HyperLogLog in Practice: Algorithmic Engineering of a
+            \emph{"HyperLogLog in Practice: Algorithmic Engineering of a
 State of The Art Cardinality Estimation Algorithm'} Proceedings of the EDBT 2013 Conference, ACM, Genoa, Italy 2013 (paper)
 			\bibitem{bib7} Boykin O., Ritchie S., O'Connel I., Lin J.: 
-				\emph{``Summingbird: A Framework for Integrating Batch and
+				\emph{"Summingbird: A Framework for Integrating Batch and
 Online MapReduce Computations'} 2013 (paper) 
 			\bibitem{bib8} Zaharia M. et. Al :
-				\emph{``Resilient Distributed Datasets: A Fault-Tolerant Abstraction for
+				\emph{"Resilient Distributed Datasets: A Fault-Tolerant Abstraction for
 In-Memory Cluster Computing'} In Proceedings of the 9th USENIX
 conference on Networked Systems Design and
 Implementation 2012 (paper)
             \bibitem{bib9} Kreps Jay,
-            \emph{``Questioning the Lambda Architecture'} 2014 (blog article) http://radar.oreilly.com/2014/07/questioning-the-lambda-architecture.html
-		\bibitem{bib19} Kreps Jay, Narkhede Neha, Rao Jun      
-		\emph{``Kafka: a Distributed Messaging System for Log Processing'} 2011 (paper) 
+            \emph{"Questioning the Lambda Architecture'} 2014 (blog article) http://radar.oreilly.com/2014/07/questioning-the-lambda-architecture.html
+		\bibitem{bib19} Kreps Jay, Narkhede Neha, Rao Jun     
+		\emph{"Kafka: a Distributed Messaging System for Log Processing'} 2011 (paper) 
+		\bibitem{bib25} Dean Jeffrey, Ghemawat Sanjay
+		\emph{"MapReduce: Simplified Data Processing on Large Clusters'} 2008(paper) 
+		\bibitem{bib24} Vavilapalli et Al.    
+		\emph{"Apache Hadoop YARN: Yet Another Resource Negotiator'} 2013 (paper) 
+		\bibitem{bib23} HDFS High Availability    
+		\emph{"http://hadoop.apache.org/docs/r2.7.0/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithNFS.html'} (website)
          \bibitem{bib20} Apache oozie
          	\emph{''http://oozie.apache.org/''} (website)
          	 \bibitem{bib21} Zaharia M. et Al.
