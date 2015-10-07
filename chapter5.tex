@@ -1,18 +1,252 @@
-\chapter{Results and Tests}
+\chapter{Tests and results}
 \label{chapt:chapter5}
 
 \section{Monitoring the system}
-In order to monitor the system and get statistics about usage indices of each layer such as throughtput and latency it has been user the library \textit{dropwizard-metrics} \footnote{http://dropwizard.github.io/metrics} (formerly \textit{codahale metrics}). This library allows to define different type of metrics for couting the ratio of a certain event or the execution time of a function- Each metric refers to a \textit{MetricRegistry} object which accumulates all the received data and publish them using one or more \textit{Reporter}. Example of supported reporter are \textit{CSVReporter}, \textit{HTTPReporter} and \textit{GraphiteReporter}. For our purposes it has been used a \textit{CSVReporter} which append the report for a configurable timewindow to  CSV file. 
+\label{metrics}
+In order to monitor the system and get statistics about KPIs (key performance indiators) of each layer such as throughput and latency, it has been used the library \textit{dropwizard-metrics} \footnote{http://dropwizard.github.io/metrics} (formerly \textit{codahale metrics}). This library allows to define different types of metrics for counting the ratio of a certain event or the execution time of a function. Each metric refers to a \textit{MetricRegistry} object which accumulates all the received data and publishes them using one or more \textit{Reporter}. Example of supported reporters are \textit{CSVReporter}, \textit{HTTPReporter} and \textit{GraphiteReporter}. For our purposes it has been used a \textit{CSVReporter} which append the report for a configurable time window to CSV file. 
 \subsection{RealTime Layer}
-In order to monitor Storm topology we are interested in two metrics:
+In Storm topology we are interested in two metrics:
 \begin{itemize}
 \item throughput of each component
 \item latency of a tuple, i.e. the time each message spends into the topology, from the moment it is emitted by the spout till the moment it is processed by the last bolt.
 \end{itemize}
-Concerning the thoughput of each component, it is easy to meausure it as the number of times
-
+Concerning the throughput of each component, it is easy to measure it as the number of tuple executed by that component (either a spout or a bolt) in a fixed time span, for instance a second. Concerning the latency, it is measured as the difference between the time when the tuple is processed by an Elasticsearch bolt and the time when that tuple is created by a Kafka spout. The latter value is emitted beside the message itself and propagated with it through the whole topology. This approach relies on having the system clock of each node in the cluster synchronized with the others or with an external trustful source. The easiest way to achieve that is to synchronized the system clock of each server with an external source using NTP protocol. Under linux, this can be done installing the \textit{ntp} package which runs a \textit{ntpd} daemon synchronizing the system clock with a NTP server at startup time and at every configurable interval. Of course each server must have access to the public internet and on AWS this can be done using an elastic IP or configuring the instance to have a public IP at creation time.
+\subsection{Batch Layer}
+In the EventFetcher process we are interested in the throughput of each instance. Since it is responsible for fetching messages from Kafka e write them on HDFS, the throughput comprises both actions.\\
+Concerning the Spark module, we keep track of the execution time of each aggregation process. The code is designed such that the main function waits the computation to be over before exiting the program. Using a \textit{Timer} object from the monitoring library allows to calculate the exact running time. The same has been done for the function which deletes real-time records after completing a batch process.
+\subsection{Serving Layer}
+In this layer we are interested in	 two metrics:
+\begin{itemize}
+\item Number of documents indexed
+\item Average query time
+\end{itemize}
+The first metric is trivial as it is just the result of a query which matches all the documents stored in Elasticsearch. The average query time instead, is the result of the average of the different times needed for executing each example query defined in Kibana. Elasticsearch provides Java API for interacting with a cluster, hence the same example queries has been translated in order to access the serving layer from outside Kibana.
 \section{Testing VimondAnalytics}
-In this section we are going to show the results of the tests made on a working implementation running on AWS. When not mentioned, the settings and the virtual machine configurations are the same of the ones indicated in section...\\
+In this section we are going to show the results of the tests made on a working implementation running on AWS. When not mentioned, the settings and the virtual machine configurations are the same as indicated in section \ref{deploy}.
+\subsection{Test methodologies}
+\label{methodologies}
+The data ingested in real-time from the TV2 environment don't fit very well for a test scenario for two reasons: first the frequency of data ingestion is not constant and overall the throughput is way to low. Secondly it is not possible to replicate the same scenario for several executions of the same test or similar ones. Using directly the production data would make a test not consistent with the others.\\
+In order to solve this problem it has been design a safe test environment context leveraging the log retention property of Kafka. Another broker is replicated in the same VPC where the system normally works, just with the purpose of accumulating enough data for running the tests. Data are propagated into a topic in the new instance and saved using a higher log retention policy. For running the tests, the same data are written into another topic of the same instance with a throttled rate and either the Storm topology and the EventFetcher process read data from that topic. Using this approach enables to decide the data input frequency and to run several tests on the same dataset. Figure \ref{test-1} summaries the test environment.
+\begin{figure}[h]
+       \makebox[\textwidth][c]
+       {
+        \includegraphics[width=15cm]{imgs/test-env}
+        }
+\caption[Test envirovment]{Test environment: input data are read at a throttled rate}
+\label{test-1}
+\end{figure}
 
-\subsection{Tests metodologies}
-firehose throttled
+\pagebreak
+\section{General purpose tests}
+\label{generaltests}
+The first test executed on the system acts as a proof of concept of Lambda architecture approach. It was tested the difference of having only realtime and serving layers versus a complete system, in terms of number of documents indexed into the serving layer and average query time. Both the executions use the same dataset injected at a frequency of 10K messages per second, according to the methodology explained in section \ref{methodologies}.
+
+\begin{figure}[h]
+        \makebox[\textwidth][c]
+        {
+        \includegraphics[width=15cm]{imgs/tesi_grafici/rt_only.pdf}
+        }
+\caption[RealTime layer only: average query time vs number of documents]{RealTime layer only: average query time vs number of documents}
+        \label{vimondAnalytics-vs_rt}
+\end{figure}
+
+\begin{figure}[h]
+        \makebox[\textwidth][c]
+        {
+        \includegraphics[width=15cm]{imgs/tesi_grafici/VA_query_doc.pdf}
+        }
+\caption[VimondAnalytics: average query time vs number of documents]{VimondAnalytics: average query time vs number of documents}
+        \label{vimondAnalytics-vs_rt_va_10}
+\end{figure}
+
+A dataset of 45 Gb was processed by both systems: in the real-time-only one, data are ingested into the serving layer which aggregates them for satisfying the queries requests. As expected, the number of indexed documents grows with the time, since there is no deletion mechanism, and after 1:45 hours of execution, there are more than 20 million documents stored. Even though Elasticsearch can scale out very well even with one instance, the average query time grows as well according to the number of documents to query. It goes from $\sim$50 ms to $\sim$	200 ms and it keeps growing  all over the time. It follows that such a solution requires the serving layer to scale out to more instances as the number of documents reaches a threshold which causes a substantial augmentation of the query time.\\
+VimondAnalytics (and in general Lambda architecture) avoids this problem by deleting the real-time events when a corresponding batch job is successfully executed. It results in a number of documents equals to the one ingested by the real-time layer in the time frame not covered by batch jobs, plus a small amount representing the aggregated data for the previous time windows. The query time is also influenced by this documents handling policy; instead of increasing, it reaches local maxima in corrispondence of a deletion event. These spikes are due to the configuration used for this test: an instance of Elasticsearch has to satisfy at the same time requests for batch insertion and deletion, and the corresponding query time is hence affected. Apart to these temporal behaviours, the average query time keeps growing till the first deletion event, then it stays inside the interval [50,150] ms.
+The next tests refer to the same dataset processed by VimondAnalytics implementation with different batch time windows. The cases analyzed are time windows of 5, 10 and 15 minutes. Bigger time windows lead to a drop of performances with the current implementation and deploy as the batch layer requires more memory for caching a possible bigger dataset.
+The following configuration was used for each test case:
+\begin{itemize}
+\item Data injection: one instance as described in section \ref{deploy}
+\item RealTime layer: three instances as described in section \ref{deploy} with the following topology configuration
+\begin{itemize}
+\item Kafka spout: degree of parallelism of 2
+\item Filter bolt: degree of parallelism of 2
+\item UserAgent bolt:  degree of parallelism of 2
+\item Serializer bolt:  degree of parallelism of 2
+\item Elasticsearch bolt: degree of parallelism of 3
+\end{itemize}
+\item Batch layer:
+\begin{itemize}
+\item EventFetcher: one instance as described in section \ref{deploy}
+\item Yarn: three instances as described in section \ref{deploy}
+\end{itemize}
+\item Serving layer: one instance as described in section \ref{deploy}
+\end{itemize}
+
+\subsubsection{5 minutes batch window}
+\begin{figure}[h]
+        \makebox[\textwidth][c]
+        {
+        \includegraphics[width=15cm]{imgs/tesi_grafici/VA_final_5_query.pdf}
+        }
+\caption[VimondAnalytics: batch window of 5 minutes]{VimondAnalytics: batch window of 5 minutes}
+        \label{vimondAnalytics-final_10}
+\end{figure}
+
+
+\begin{figure}%[!hbt]
+\makebox[\textwidth][c]
+{
+\subfloat[Input throughputs]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_5_thr.pdf}} 
+\subfloat[RealTime layer latency]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_5_latency.pdf}}
+}
+\\
+\makebox[\textwidth][c]
+{
+\subfloat[Jobs execution time]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_5_job_times.pdf}} 
+\subfloat[RealTime events deleted for each batch execution]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_5_deleted.pdf}}
+}
+\caption[VimondAnalytics metrics for a batch window of 5 minutes]{VimondAnalytics metrics for a batch window of 5 minutes}
+\end{figure}
+
+\pagebreak
+
+\subsubsection{10 minutes batch window}
+
+\begin{figure}[h]
+        \makebox[\textwidth][c]
+        {
+        \includegraphics[width=15cm]{imgs/tesi_grafici/VA_final_10_query.pdf}
+        }
+\caption[VimondAnalytics: batch window of 10 minutes]{VimondAnalytics: batch window of 10 minutes}
+        \label{vimondAnalytics-final_10}
+\end{figure}
+
+
+\begin{figure}%[!hbt]
+\makebox[\textwidth][c]
+{
+\subfloat[Input throughputs]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_10_thr.pdf}} 
+\subfloat[RealTime layer latency]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_10_latency_new.pdf}}
+}
+\\
+\makebox[\textwidth][c]
+{
+\subfloat[Jobs execution time]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_10_job_times.pdf}} 
+\subfloat[RealTime events deleted for each batch execution]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_10_deleted.pdf}}
+}
+\caption[VimondAnalytics metrics for a batch window of 10 minutes]{VimondAnalytics metrics for a batch window of 10 minutes}
+\end{figure}
+
+\pagebreak
+\subsubsection{15 minutes batch window}
+
+\begin{figure}[h]
+        \makebox[\textwidth][c]
+        {
+        \includegraphics[width=15cm]{imgs/tesi_grafici/VA_final_15_query.pdf}
+        }
+\caption[VimondAnalytics: batch window of 15 minutes]{VimondAnalytics: batch window of 15 minutes}
+        \label{vimondAnalytics-final_15}
+\end{figure}
+
+
+\begin{figure}%[!hbt]
+\makebox[\textwidth][c]
+{
+\subfloat[Input throughputs]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_15_thr.pdf}} 
+\subfloat[RealTime layer latency]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_15_latency_new.pdf}}
+}
+\\
+\makebox[\textwidth][c]
+{
+\subfloat[Jobs execution time]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_15_job_times.pdf}} 
+\subfloat[RealTime events deleted for each batch execution]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/VA_final_15_deleted.pdf}}
+}
+\caption[VimondAnalytics metrics for a batch window of 15 minutes]{VimondAnalytics metrics for a batch window of 15 minutes}
+\end{figure}
+\pagebreak
+\subsubsection{Consideration}
+
+The previous tests referred to a same dataset of 27 Gb analyzed by VimondAnalytics implementation in the cases of batch timewindows of 5, 10 and 15 minutes. In all the three query time trends we can distinguish the same pattern. At first, the number of documents indexed into the serving layer start growing as does the corresponding query time. With the first deletion event, we have the first spike in the query time which then, decreases and increases again along with the executions of the next deletion events. The only difference between the three different tests lies in the values that the number of documents and the query time assume.
+As stated in \ref{chap:chapter3}, having a small timewindow implies finer-grained results, as end-users can query the system for a smaller time frame. \\
+For each test execution, we reported metrics regarding the behaviour of every part of the system. Apart from the throughputs of the input components, which have the same trends in every execution due to the throttled input rate, they assume different values influenced by the different time windows. The most interesting one is the latency of the real-time layer. After an initial spike, the latencies of the Elasticsearch bolts tend to stabilize to values comprised between 200 and 800 $\mu$s. They stay stable till the first deletion event, which cause a rapid increase$\sim$ and after that, the final bolts of the Storm topology adapt their execution with Elasticsearch and eventually the latencies converge to values from 800 to 1800 $\mu$s. This behaviour is clearly identifiable in all the executions, with the only difference of the time at which the first deletion event occurs, respectively after 10, 20, and 30 minutes.
+
+\section{Failover Tests}
+In this section we are going to show the results of tests made on some failover scenarios. We will refer to a kill action when a \textit{SIGKILL} signal is sent to the process (\textit{kill -9} unix command), while a stop/start action represent a kill action followed by a restart of the process.
+
+\subsection{Kafka failover}
+This test investigates the reaction of the input components of VimondAnalytics (Kafka spout and EventFetcher processes) when there is a failure in the data ingestion part. Two type of failures are simulated in the Kafka broker: a kill of the process and a stop/start action. Since also Kafka is launched in supervised mode, we are expecting that, killing the process does not cause any delay or message loss in the system. 
+
+\begin{figure}%[!hbt]
+\makebox[\textwidth][c]
+{
+\subfloat[EventFetcher throughput with Kafka kill actions]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/kafka_failure_ef_kill.pdf}} 
+\subfloat[Kafka spout throughput with Kafka kill actions]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/kafka_failure_ks_kill.pdf}}
+}
+\\
+\makebox[\textwidth][c]
+{
+\subfloat[EventFetcher throughput with Kafka start/stop actions]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/Capture2.PNG}} 
+\subfloat[Kafka spout throughput with Kafka start/stop actions]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/Capture1.PNG}}
+}
+\caption[Input throughputs variation for a Kafka kill and stop/start action]{Input throughputs variation for a Kafka kill and stop/start action}
+\end{figure}
+
+As expected, killing the Kafka process does not influence the throughput of any input component, as after a failure, they just keep waiting for its restart. When Kafka is stopped and restarted after a random time, we can notice a drop in the throughput, either in the Kafka spout and in the EventFetcher process. This is absolutely normal since, for the time Kafka is inactive, messages are not ingested into the system. Finally, when Kafka is restarted, each component increases its throughput due to the higher data input frequency. Each stop/start event causes this pattern in the throughput trends, and results in a higher processing time respect to the case when Kafka is just killed and immediately restarted. The number of read messages is the same in both the test scenarios.
+\pagebreak
+\subsection{EventFetcher failover}
+The next tests want to investigate the fault-tolerance of the EventFetcher process in case of its failures. Two instances of this process are used, one working normally and the other having failures. As for the previous test, we simulated a process shutdown by sending it a \textit{SIGKILL} signal and a stop/start action. 
+
+\begin{figure}%[!hbt]
+\makebox[\textwidth][c]
+{
+\subfloat[EventFetcher throughputs with no failures]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/ef_fail_ok.pdf}} 
+\subfloat[EventFetcher 1 throughputs with kill actions] {\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/ef_kill_ok.pdf}}
+}
+\\
+\makebox[\textwidth][c]
+{
+\subfloat[EventFetcher 2 throughputs with kill actions ]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/ef_killl_ok_1.pdf}} 
+\subfloat[EventFetcher 1 throughputs with stop/start actions ]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/ef_st_st_ok.pdf}}
+}
+\caption[Input throughputs variation for EventFetcher kill and stop/start actions]{Input throughputs variation for EventFetcher kill and stop/start actions}
+\end{figure}
+
+In case of no failures, we can notice that the instances divide equally the input messages by converging to the same throughput. We recall that the throughput is slightly less than the input one due to the time needed for writing messages on HDFS. In case of several kill events, we can notice a rapid increase of the throughput of the healthy instance, due to the rebalancing mechanism of Kafka within a consumer group. What happens is that, for the time the second instance is not active, all the topic partitions are assigned to the healthy one. Since also EventFetcher is run in supervised mode, it is restarted immediately after it is killed, and consequently the throughputs will increase or decrease in order to converge again to the same value.\\
+In case of stop/start actions, we can recognise the same trend of the previous case, with the throughput of the healthy instance wich increases and decreases according to the functioning of the unhealthy instance. Of course, the difference is how fast the rate changes: during the first stop action, it reaches almost 9k messages/second, and later it drops when both the processes are working correctly. The same happens during the second stop action.
+
+\pagebreak
+\subsection{Storm failover}
+With this test we want to show how the accuracy of the results produced by the real-time layer is affected by Storm failover events. The accuracy is measured respect to the results of the batch layer for the same time window of data. For simulating a failure only in the real-time layer it is possible to kill randomly \textit{worker} processes or the \textit{supervisor} for a node among the slave ones. Killing the \textit{supervisor} does not affect the normal processing as it is involved just in coordination and monitoring operations. Moreover it is a \textit{fail-safe} process, hence, after being automatically restarted, it comes back to its normal functioning.\\
+Killing a \textit{worker} process it is more interesting. It results in one or more killed executors and then in a consequent message loss. Once a supervisor process noticed a failure in a worker which is under its control, it tries to restart it on the same machine. In case of continuous failures, \textit{Nimbus} schedules the execution of that worker in another machine of the cluster. As stated before, Storm allows to run a topology in reliable mode exploiting the acking mechanism, so both scenarios were tested.
+
+\begin{figure}%[!hbt]
+\makebox[\textwidth][c]
+{
+\subfloat[Real-time layer accuracy with acking]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/111111.pdf}} 
+\subfloat[Real-time layer accuracy without acking]{\includegraphics[width=10cm, height=8cm]{imgs/tesi_grafici/1111112.pdf}}
+}
+\caption[Storm failover]{Storm failover: variation of the accuracy of RealTime layer w/o acking in presence of worker failure}
+\end{figure}
+
+In case of acking topology, we are in presence of message duplicates, due to the \textit{at-least-one} message semantic offered by Storm. Even though there are drops in the accuracy, there is no message loss. In our implementation context, this does not change the final result, as the serving layer is agnostic to possible message duplicates. Elasticsearch provides a method for executing aggregations based on a unique message field value, but as for the most of databases, it uses the \textit{HyperLogLog} approximation algorithm. Anyway, avoiding message loss could be useful in other implementations with a serving layer aware of messages duplication. In case of unreliable topology, killing worker process leads to message loss and consequently to a drop in the accuracy. For our test queries, we notice that, loosing messages implies having a slightly higher accuracy respect to the reliable execution mode. This is anyway, totaly dependant on the test queries and might not be true for other ones. \\
+Both these tests prove one of the key concept of Lambda architecture, and then of the proposed approach, which is the eventual consistency. Drops in the accuracy of the real-time layer, either for component failures or just for inaccuracy of the results due to approximation methodologies, are eventually corrected by the batch layer. Specifically, in VimondAnalytics model, the results are consistent with a time frame after $2 * batch\_time\_windows + \delta $, where $ \delta $ is processing time of a batch of data (aggregation plus real-time events deletion time).
+\subsection{Yarn failover}
+
+In this test, the same dataset of 27 Gb is analyzed by the Yarn/Spark module twice, the first time without errors while the second time, a random Yarn container is killed during each execution. It was recorded the processing time of each Spark process according to what explained in \ref{metrics}. A 5 minutes time window is used, but similar results can be obtained for different values.
+
+\begin{figure}[h]
+        \makebox[\textwidth][c]
+        {
+        \includegraphics[width=15cm]{imgs/tesi_grafici/spark_failover.pdf}
+        }
+\caption[Yarn failover]{Yarn failover: variation of batch job execution time}
+        \label{vimondAnalytics-YARN-failure}
+\end{figure}
+
+In order to understand the results of this test, we have to keep in mind how Yarn distributes the execution of a Spark job in several containers and how it handles their possible failures. As explained in section \ref{batch-impl}, Spark is executed in \textit{cluster-mode} on Yarn, which cause the \textit{driver program} to be run in a container along with Yarn \textit{application master}. Since we have two executors in the current implementation, each Spark job consists in three containers: one for the \textit{driver/app. master} and one for each executor.\\
+A failure in an executor container causes the \textit{application master} to request \textit{resource manager} to allocate a new container with a new executor. Leveraging the distribute nature of Spark \textit{resilient dataset}, the new executor computes his functions only on the partitions it was responsible of. The job execution is not cancelled, but its processing time results higher due to the executor restart time. By default, after two executor container failures in the same application, the overall job is considered failed. In picture \ref{vimondAnalytics-YARN-failure} we have an executor container failure in the execution 2 and 3. As a consequence, the processing time results increased by a value depending on when the container fails. The later it happens, the longer the execution time as the new executor has to calculate more steps for its dataset partitions while the other one stays idle waiting it to finish the recovering process.\\
+A failure in the \textit{application master} container instead, is more dangerous, as provokes a failure in the current application. In this situation, the \textit{resource manager} kills every active container for that application and starts a new attempt of it. By default, after failing two attempts, the overall job is considered failed. In our test, there is an \textit{application master} failure in the 5th execution. As a result, the overall processing time is increased by the time at when there was a failure, since a new application execution is started after it.
+\section{Tests results}
+In this chapter we analyzed the performances of the system implemented in this thesis project. We showed how this model beats a classic approach consisting in storing documents and aggregating them on-the-fly. VimondAnalytics is superior in terms of number of stored documents and, consequently, query time. The drawback of this approach consists in the spikes of the query time in correspondence of the deletion events. This transitory period gets longer when a bigger batch time window is used, since the number of real-time documents to be deleted is higher and then their deletion requires more time. Anyway this can mitigated using a better configuration\footnote{https://www.elastic.co/guide/en/elasticsearch/reference/1.6/modules-node.html} in the serving layer: Elasticsearch allows to define special \textit{client nodes} such that they do not store data but their purpose is just to balance the load of the incoming request among the \textit{data nodes}.\\
+Concerning the failover scenarios, we analyzed the effects of failures in the data ingestion, in the EventFetcher process, in the real-time and batch layer. The system accomplished the expectations of the Lambda architecture approach: the batch layer resulted to be more fault-tolerant than the real-time one. Having failures in the real-time part provokes drops in the accuracy for the temporary results producted by it. These errors, anyway, will be eventually corrected by the batch results. We showed also how the current implementation of the batch layer recovers from failure events. Having failures in the Yarn containers causes the processing time for a batch job to be delayed due to the restart of the application or part of it. Unfortunately, the delay in the job execution time can cause a shift in the next scheduled executions, in case it exceeds the batch window length. A reasonable timeout in the Oozie configuration must be set, otherwise subsequent jobs will be considered as failed and they have to be rescheduled. A simple solution could be using Oozie SLA support, which allows to trigger dedicate pipelines in response to a SLA events such a delayed execution or a failure.\\
+The failure scenarios analyzed cover just a part of all the possible ones, for instance a failure of the master node of the cluster. According to the frameworks used for this implementation, we have a single point of failure both in the real-time and in the batch layer, even though they have different behaviours. Concerning the batch layer, a failure in Yarn \textit{resource manager} causes the immediate shutdown of all the applications running at that time. In case of HDFS datanode unavailability, Spark jobs cannot be executed as they cannot read input data from HDFS. Oozie instead, relies on its database availability for reading and executing scheduled executions. A failure in the latter, provokes the deletion on every schedule batch job. Fortunately, there exist high availability configurations either for Yarn \textit{resource manager}, HDFS \textit{data node} and Oozie database which uses an idle master replica sharing the state of the active one through a storage area network (SAN), a distributed file system or a distributed database. Storm instead, relies on Nimbus for scheduling worker processes across the slave nodes in the cluster. In case of its unavailability, the workers continue to function normally and supervisor processes are still able to restart failed workers. However, in case of a slave node failure, tasks will not be restarted on the healthy slave nodes. Anyway, the last release of Storm (0.11) introduced Nimbus high availability\footnote{https://issues.apache.org/jira/browse/STORM-166}. Due to the tight timeframe of this thesis, it was not possible to implement such these recovering mechanisms.
