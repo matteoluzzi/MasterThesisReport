@@ -1,54 +1,12 @@
-\chapter{Implementation}
+\chapter{Implementation of VimondAnalytics}
 \label{chap:chapter4}
-In this chapter we are going to show a concrete implementation of the architecture previously explained. For each layer we will provide explanation of the most important features using diagrams and code snippets. The whole system is implemented in Java. The choice was driven by the frameworks used for the implementation: Storm is implemented in \textit{Clojure} but it provides Java API, Spark and Kafka are implemented in \textit{Scala} but the do offer as well Java API as Elasticsearch does.
-Finally, in some parts, projects from Vimond were used or modified, and since Vimond Core API are written in Java, no other language choice was possible.
-
-\section{AWS Deploy}
-\label{deploy}
-The system is deployed on a private VPC (virtual private cloud) from Amazon Web Services (AWS). AWS was chosen since also Vimond uses it for its infrastructures. Moreover, the company providing input data (TV2) runs as well its environments there. Anyway, it would have been possible to deploy it on any cloud provider as it does not use exclusive services of Amazon, but just basic processing and networking resources. An example of that is Hadoop deployment choice: Amazon provides a service called Elastic Map Reduce\footnote{https://aws.amazon.com/elasticmapreduce} that allows to fire up a working Hadoop cluster (including HDFS) hiding all the complexity of tuning and setting it. Instead, it has been deployed on separate virtual machines and part of the project effort was to manually tune the settings in order to achieve the best performances for this scenario.\\
-Next are reported the machines used for each layer of VimondAnalytics.
-\begin{itemize}
-\item Data ingestion: \textit{t2.medium} (2 vCPU Intel Xeon up to 3.3 Ghz, 4 Gb RAM,  8 Gb EBS).
-\item EventFetcher: \textit{t2.small} (1 vCPU Intel Xeon up to 3.3 Ghz, 2 Gb RAM,  8 Gb EBS).
-\item Processing layer:
-	\begin{itemize}
-	\item Master node: \textit{m4.large} (2 vCPU Intel Xeon E5-2676 v3 2,4 Ghz, 8 Gb RAM, 8 Gb EBS)
-	\item Slave node \textit{m4.xlarge} (4 vCPU Intel Xeon E5-2676 v3 2,4 Ghz, 16 Gb RAM, 60 Gb EBS)
-	\end{itemize}
-\item Serving layer \textit{m4.xlarge} (4 vCPU Intel Xeon E5-2676 v3 2,4 Ghz, 16 Gb RAM, 30 Gb EBS)
-\end{itemize}
-
-The following services were deployed on each specific machine:
-\begin{itemize}
-\item Data ingestion: Kafka broker,  Zookeeper, Exhibitor (Zookeeper monitoring tool).
-\item Event fetcher: one instance of event-fetcher program.
-\item Master node: HDFS Namenode, YARN Resource manager, Storm Nimbus, Oozie. 
-\item Slave node: HDFS Datanode, YARN Node manager, Storm Supervisor.
-\item Serving Layer: Elasticsearch.
-\end{itemize}
-
-The default configuration used for a normal execution of the architecture is:
-\begin{itemize}
-\item 1 instance of Data ingestion
-\item 1 instance of EventFetcher
-\item 1 instance of Master node
-\item 2 instance of Slave node
-\item 1 instance of Serving layer
-\end{itemize}
-
-\begin{figure}[h]
-        \centering
-        \includegraphics[width=17cm]{imgs/machine_diagram.pdf}
-\caption[AWS default configuration]{AWS default configuration}
-        \label{aws-1}
-\end{figure}
-
-In order to minimize the number of virtual machines used, the batch and real-time processing layers share the same ones. Setting properly their configuration files, it is possible to avoid  any resource starvation problems. Spark was not directly deployed on any machine, but its executable libraries must be copied on HDFS in order to be shared among the slave nodes. When a batch job is scheduled, each slave node fetches these libraries in order to execute the job itself.\\
-Every deployed service is executed in supervised mode using \textit{daemontools}\footnote{http://cr.yp.to/daemontools.html} commands suite. This implies each process to be stared at machine boot time and restarted in case of its failure. Some of the components of the frameworks used in this implementation are \textit{fail-safe} and they required to be executed in supervised mode, which means that in case of their failure, they can be restarted without affecting other parts of the system as they will restore their state from a safe checkpoint.
+In this chapter we will present a concrete implementation of the VimondAnalytics architecture described in Chapter \ref{chap:chapter3}. For each layer we will provide explanation of the most important features using diagrams and code snippets.\\
+The whole system has been implemented in Java. Our choice was driven by the frameworks used for the implementation: Storm is implemented in \textit{Clojure} but it provides Java API, Spark and Kafka are implemented in \textit{Scala} but they do offer as well Java API as Elasticsearch does.
+Finally, in some parts, past projects from Vimond have been used or modified, and since Vimond Core API are written in Java, no other language choice was possible.
 
 \section{Data ingestion}
-TV2 runs Sumo production environment into a virtual private cloud on Amazon Web Service (AWS), isolated from the outside network, hence it is not possible to fetch them directly.  A bastion server is normally placed as protection against undesired accesses such that only trusted user can access the private cloud and network traffic is routed through NAT instances. \\
-Since Sumo platform uses Apache Kafka as a message sharing system between several services, it has been convenient and easy to create a "data bridge" inside that environment for pushing data to the VimondAnalytics one. For this purpose it has been used an already existing Vimond project called "Firehose", which has been modified for this use case. Firehose simply implements a data connection between two endpoints. Data are read from a Kafka topic, validated and forwarded to another Kafka cluster. For security reason, Firehose is installed on a machine inside TV2 VPC: in this way the source Kafka cluster is directly accessible through private IPs. A public IP (AWS elastic IP) is assigned to the VimondAnalytics Kafka cluster, in order to be reachable from outside the private VPC.
+TV2 runs Sumo production environment into a virtual private cloud on Amazon Web Service (AWS), isolated from the outside network, hence it is not possible to directly fetch its data.  A bastion server is usually placed as protection against undesired accesses, in such a way that only trusted users can access the private cloud and network traffic is routed through NAT instances. \\
+Since Sumo platform uses Apache Kafka as a message sharing system between several services, it has been convenient and easy to create a ``data bridge" (Figure \ref{firehose-1}) inside that environment for pushing data to VimondAnalytics. For this purpose we decided to use an already existing Vimond project called ``Firehose", which has been modified for this use case. Firehose simply implements a data connection between two endpoints. Data are read from a Kafka topic, validated and forwarded to another Kafka cluster. For security reason, Firehose is installed on a machine inside TV2 VPC: in this way the source Kafka cluster is directly accessible through private IPs. A public IP (AWS elastic IP) is assigned to the VimondAnalytics Kafka cluster, in order to be reachable from outside the private VPC.
 
 \begin{figure}[h]
         \centering
@@ -58,7 +16,7 @@ Since Sumo platform uses Apache Kafka as a message sharing system between severa
 \end{figure}
 
 \subsubsection{Data model}
-As said in the previous chapter, the data used for this project come from the resume player functionality provided by TV2 pay-per-view platform \textit{Sumo}. Data are generated by players running on different devices: this results in two different type of  data events according to whether the player uses Silverlight\footnote{http://www.microsoft.com/silverlight} plugin or not. The data events generated by other plugins contain only a subset of information of the ones generated by Silverlight plugin. Specifically, an example of non-silverlight event is:
+As said in the previous chapter, the data used for this project come from the resume player functionality provided by TV2 pay-per-view platform \textit{Sumo}. Data are generated by players running on different devices: this results in two different type of  data events according to whether the player uses Silverlight\footnote{http://www.microsoft.com/silverlight} plugin or not. The data events generated by other plugins contain only a subset of information of those generated by Silverlight plugin. Specifically, an example of non-Silverlight event is:
 \begin{listing}
 \begin{minted}[frame=single,
                framesep=3mm,
@@ -88,12 +46,12 @@ As said in the previous chapter, the data used for this project come from the re
     }
 }               
 \end{minted}
-\caption{Non silverlight event example} 
+\caption{Non-Silverlight event example} 
 \label{nosilveright-example}
 \end{listing}
 
 \newpage
-In addition to these information, an event generated by Silverlight plugin contains an another field with details about the client used for playing a particular asset. In listing \ref{silveright-example} we reported the most important fields used in our analysis.
+In addition to this information, an event generated by Silverlight plugin contains another field with details about the client used for playing a particular asset. In Listing \ref{silveright-example} we reported the most important fields used in our analysis.
 
 \begin{listing}
 \begin{minted}[frame=single,
@@ -118,24 +76,24 @@ In addition to these information, an event generated by Silverlight plugin conta
 \label{silveright-example}
 \end{listing}
 
-Each event is handled by the different layers either as a simple Java String object or serialized into a custom \textit{StormEvent} or \textit{SparkEvent} object when it is needed to access or modify its internal state.
+Each event is handled by the different layers either as a simple Java String object or serialized into a custom \textit{StormEvent} or \textit{SparkEvent} object when its internal state has to be accessed or modified.
 
 \section{Output results}
-One of the limit of Lambda architecture is that the output needs to be defined a priori. According to the considerations made in section \ref{chap3:consideration}, the following output views has been defined:
+One of the limits of the Lambda architecture is that the output needs to be defined a priori. According to the considerations we made in Section \ref{chap3:consideration}, the following output views have been defined:
 \begin{enumerate}
-\item Number of times of assets starting or ending. 
+\item Number of times of starting or ending asset. 
 \item Most started assets.
 \item Most ended assets.
 \item Most browsers used when starting an asset.
-\item Most OSs used when starting an asset.
+\item Most OSes used when starting an asset.
 \item Most video formats used when starting an asset.
 \end{enumerate}
-In order to have consistent outputs across the different batch views we exploit the field \textit{"playerEvents"} which gives information of the type of event performed by the player reproducing an asset. It can assume the values \textit{start}, \textit{period} and \textit{end}. We could not use the event marked with \textit{period} as the different batch windows does not share information and then every results produced out of them would have not been consistent among different time windows. A \textit{playerEvent=start} or \textit{playerEvent=end} represents instead a unique event. Unfortunately, only a subset of the imput data contains information about the player event (i.e. the one generated by the Silverlight plugin). A request has been forwarded to TV2 for having these information also in the events generated by other devices. Moreover it has been requested to change the mode of generating \textit{end} events: an user likely stops the streaming of an asset before it actually ends, for instance when skipping the ending credits, and this results in a smaller number of this kind of events. An alternative solution would be to consider an asset to be ended when the streaming reached a certain percentage over its total length, for instance 95\%. These features are going to be implemented within the next TV2 \textit {Sumo} platform release.
+In order to have consistent outputs across the different batches, we exploit the field \textit{``playerEvents"} which gives information of the event type generated by the player reproducing an asset. The type can assume \textit{start}, \textit{period} and \textit{end} values. We could not use the event marked with \textit{period} as the different batch windows do not share information and then every result produced out of them would have not been consistent among different time windows. A \textit{playerEvent=start} or \textit{playerEvent=end} represents instead a unique event. Unfortunately, only a subset of the input data contains information about the player event (i.e., the one generated by the Silverlight plugin). A request has been forwarded to TV2 for having this information also in the events generated by other devices. Moreover, it has been requested to change the mode of generating \textit{end} events: a user likely stops the streaming of an asset before it actually ends, for instance when skipping the ending credits, and this results in a smaller number of this kind of events. An alternative solution would be to consider an asset to be ended when the streaming reached a certain percentage over its total length, for instance 95\%. These features are going to be implemented within the next TV2 \textit {Sumo} platform release.
 
 \section{Batch layer}
 \label{batch-impl}
 \subsection{EventFetcher}
-EventFetcher is the process in charge of reading events from Kafka and store them in the HDFS according to their timestamp. There are two different execution mode: unreliable and reliable. Figure \ref{EF-Class} shows the class diagram for the main classes involved, reporting the most important fields and methods.
+EventFetcher is the process in charge of reading events from Kafka and storing them in the HDFS according to their timestamp. There are two different execution modes: unreliable and reliable. Figure \ref{EF-Class} shows the class diagram for the main classes involved, reporting the most important fields and methods.
 \begin{figure}[h]
         \centering
         \includegraphics[width=15cm]{imgs/eventfetcher-uml}
@@ -143,12 +101,12 @@ EventFetcher is the process in charge of reading events from Kafka and store the
         \label{EF-Class}
 \end{figure}
 
-The \textit{UnreliableKafkaConsumerService} extends a Kafka consumer class defined in the Vimond repository since the latter offers methods for reading messages from a brokers and committing the offset immediately after. What was missing was the ability to process the messages in batches. Each consumer threads reads from Kafka and puts the message in a \textit{LinkedBlockingQueue}. The usage of this object is due to its thread-saftness. Each batch operation is triggered either by time or by a threshold on the number of messages stored in memory. Whenever one of this events occurs, the messages are copied into a separate buffer and written in batch into the HDFS from a separate task. This ensure that, writing messages, is not a bottleneck in the overall process, but does not give any guarantees about the correct execution of the operation since the consumer threads are not aware of the writing one, and a failure of the latter would not be detected by the others.\\
-The \textit{ReliableKafkaConsumerService} instead, behaves similarly to the unreliable counterpart, but does not commit a message offset after reading it but only when a batch is successfully written on HDFS. All the consumer threads are synchronized by a \textit{CyclicBarrier} object. Every time a message is received, it is stored in a common buffer and each consumer thread checks if the message threshold or a batch interval has been reached and in case, blocks itself on the barrier. The last thread to complete these operations is the one delegated to write the messages into the HDFS: it first tries to contact the HDFS Namenode and, in case of its availability, it proceeds with the writing part. In case the Namenode is not available, for instance due to a network error, it keeps retrying to contact it using an exponential backoff policy. When the writing process is completed, the offset is finally committed since that batch of messages is considered processed. In order to avoid deadlock, the other threads wait on the barrier for no more than a configurable time, after that, the overall programs raise an exception and exits. This is not the best approach even though guarantees that the next execution of the program reads the same messages that otherwise could have been lost. \\
-In both the mode of executions, data are written as binary files according to the \textit{SequenceFile} format defined by Hadoop.
+The \textit{UnreliableKafkaConsumerService} extends a Kafka consumer class defined in the Vimond repository since the latter offers methods for reading messages from a brokers and committing the offset immediately after. What was missing was the ability to process the messages in batches. Each consumer threads reads from Kafka and puts the message in a \textit{LinkedBlockingQueue}. The usage of this object is due to its thread-safeness. Each batch operation is triggered either by time or by a threshold on the number of messages stored in memory. Whenever one of these events occurs, the messages are copied into a separate buffer and written in batch into the HDFS from a separate task. that message writing is not a bottleneck in the overall process. However, it does not give any guarantees about the correct execution of the operation, because the consumer threads are not aware of the writing one, and a failure of the latter would not be detected by the others.\\
+The \textit{ReliableKafkaConsumerService} behaves similarly to the unreliable counterpart, however it does not commit a message offset after reading it but only when a batch is successfully written on HDFS. All the consumer threads are synchronized by a \textit{CyclicBarrier} object. Every time a message is received, it is stored in a common buffer. Then, each consumer thread checks if the message threshold or a batch interval has been reached and, in case, blocks itself on the barrier. The last thread to complete these operations is that delegated to write the messages into the HDFS: it first tries to contact the HDFS Namenode and, if the latter is available, it proceeds with the writing part. In case the Namenode is not available, for instance due to a network error, it keeps retrying to contact it using an exponential backoff policy. When the writing process is completed, the offset is finally committed since that batch of messages is considered processed. In order to avoid deadlock, the other threads wait on the barrier for no more than a configurable time; if the timeout expires, the overall programs raise an exception and exits. This is not the best approach, even though it guarantees that the next execution of the program reads the same messages that otherwise could have been lost. \\
+In both the modes of executions, data are written as binary files according to the \textit{SequenceFile} format defined by Hadoop.
 
 \subsection{Batch data pipeline}
-As we said before, we used Apache Spark for implementing this layer. Spark itself does not provide any scheduling mechanism but just a single execution of the aggregation process. Normally an action scheduler is needed for the repetition of the same batch job, each time parameterized in a different way. Considering the usage of Hadoop HDFS as a solution for the data storage, it resulted convenient using Apache Oozie, the official job scheduler over Hadoop. As we explained in chapter \ref{chap:chapter2}, Oozie allows to schedule a DAG of actions, where an action is executed only when the previous one ended.\\
+To implement the batch data pipeline, we decided to use Apache Spark. Spark itself does not  have an internal jobs scheduler, hence an extenal one	 is needed to re-execute the same batch job, each time parameterized in a different way. Considering the usage of Hadoop HDFS as a solution for the data storage, using Apache Oozie, the official job scheduler over Hadoop, resulted a convenient solution. As we explained in Chapter \ref{chap:chapter2}, Oozie allows to schedule a DAG of actions, where an action is executed only when the previous one ended.\\
 \begin{figure}[h]
         \centering
         \includegraphics[width=12cm]{imgs/Oozie-DAG.pdf}
@@ -157,11 +115,11 @@ As we said before, we used Apache Spark for implementing this layer. Spark itsel
 \end{figure}
 Figure \ref{oozieDAG} shows the sequence of actions performed at every execution:
 \begin{itemize}
-\item start, fail and end are control nodes.
+\item start, fail and end are control nodes;
 \item spark-node and java-node are action nodes.
 \end{itemize}
 The user specifies the input parameters such as the beginning time or the frequency of the execution through a property file containing a list of \textit{key=value} tuple.
-An execution of the DAG is defined through an XML file called \textit{workflow.xml}, while the scheduling is defined with a \textit{coordinator.xml} file. Oozie allows to define parameterized variables which are resolved with a different value according to the current execution: in this case a job takes a different input folder according to the time of the execution as showed in listing \ref{oozie-example}.
+A single execution of the DAG is defined through an XML file called \textit{workflow.xml}, while the jobs scheduling is defined with a \textit{coordinator.xml} file. Oozie allows to define parameterized variables which are resolved with a different value according to the current execution. In our implementation, a job takes a different input folder according to the time of the execution, as showed in Listing \ref{oozie-example}.
 \begin{listing}
 \begin{minted}{xml}
 <datasets>
@@ -181,8 +139,8 @@ An execution of the DAG is defined through an XML file called \textit{workflow.x
 \label{oozie-example}
 \end{listing}
 
-With the \textit{dataset} tag it is possible to define a parametric path where to read the data according to the \textit{YEAR-MONTH-DAY/HOUR/MINUTE} pattern. A dataset can an input or output one. In this case, with the tag \textit{data-in} we consider an input dataset resolved into the dataset generated two batch windows before the current execution. For instance, let assume to have a 30 minutes batch window and let the next to be executed at 17 pm of a certain day: that job will work on the dataset containing the data from 16:00 to 16:30. This is a complication derived from Kafka: since it does not ensure messages ordering, we cannot be sure that at the time of the execution of a job, all the events of the previous timeframe has been written into the correct folder. We have checked empirically that, delaying the execution of a job of two time windows, guarantees that a batch executions reads all the data is supposed to work with.\\
-After the validation of the input parameters, the execution continues through the spark node. This is the step where raw data are actually analyzed and aggregated in order to have a compact view over them. Since we already use Hadoop, in order to avoid the deployment of another processing platform, we decided to run Spark jobs on Yarn. As stated in chapter \ref{chap:chapter2}, Yarn is independent from the computing paradigm as it only allocates resources to containers which make requests for them. There are two mode of running Spark on Yarn: \textit{client-mode} and \textit{cluster-mode}. In the first one, Spark driver program is run on the client while in the last one the driver runs within the same container of the Application master. We used the \textit{cluster-mode} and considering the case of having two executors, this results in three containers allocated by Yarn, two for the executors when the actual processing happens and one for the driver which just coordinates the process.
+With the \textit{dataset} tag it is possible to define a parametric path where to read the data according to the \textit{YEAR-MONTH-DAY/HOUR/MINUTE} pattern. A dataset can be an input or output one. In this case, with the tag \textit{data-in} we consider an input dataset resolved into the folder filled with two batch windows before the current execution. For instance, let assume to have a 30 minutes batch window and let the next be executed at 17 pm of a certain day: that job will work on the dataset containing the data from 16:00 to 16:30. This is a complication derived from Kafka: since it does not ensure messages ordering, we cannot be sure that at the time of the execution of a job, all the events of the previous timeframe have been written into the correct folder. We have checked empirically that, delaying the execution of a job of two time windows, guarantees that a batch executions reads all the data is supposed to work with.\\
+After the validation of the input parameters, the execution continues through the spark node. This is the step where raw data are actually analyzed and aggregated in order to have a compact view over them. Since we already use Hadoop, in order to avoid the deployment of another processing platform, we decided to run Spark jobs on Yarn. As stated in Chapter \ref{chap:chapter2}, Yarn is independent from the computing paradigm as it only allocates resources to containers which make requests for them. There are two modes of running Spark on Yarn: \textit{client-mode} and \textit{cluster-mode}. In the first one, Spark driver program is run on the client, while in the latter the driver runs within the same container of the Application master. We used the \textit{cluster-mode} and considering the case of having two executors, this results in three containers allocated by Yarn, two for the executors when the actual processing happens and one for the driver which just coordinates the process.
 The following picture represents the steps executed within the program.
 \begin{figure}[h]
         \centering
@@ -191,16 +149,16 @@ The following picture represents the steps executed within the program.
         \label{sparkDAG}
 \end{figure}
 
-Spark provides for methods for loading binary data directly from HDFS, so no effort is required for converting byte arrays in Strings. Every loaded event is then converted into a \textit{SparkEvent} object for being analyzed. 
-Since Kafka offers an \textit{at-least-one} message semantic, there might be duplicates, hence an additional filter process is required in order to remove them. Unfortunately this is the most expensive step as it has to analyze the whole dataset, and normally shuffle operations between the executors are needed. The dataset obtained in this step (LOAD DATA block) is then cached in memory since it is needed by every other process yet to be run in the current execution. In case of a dataset bigger than the memory available, it is spilled to the disk and deleted when it is no longer needed. Anyway, this lead to a drastic drop of the performances.\\
+Spark provides methods for loading binary data directly from HDFS, so no effort is required for converting byte arrays in Strings. Every loaded event is then converted into a \textit{SparkEvent} object for being analyzed. 
+Since Kafka offers an \textit{at-least-one} message semantic, there might be duplicates, hence an additional filter process is required in order to remove them. Unfortunately, this is the most expensive step as it has to analyze the whole dataset, and usually shuffle operations between the executors are needed. The dataset obtained in this step (LOAD DATA block) is then cached in memory since it is needed by every other process yet to be run in the current execution. In case of a dataset bigger than the available memory, it is spilled to the disk and deleted when it is no longer needed. Anyway, this leads to a drastic performance drop.\\
 From this dataset, three branches are executed:
 \begin{itemize}
-\item Counter events type: this step calculates the number of start and end events 
-\item End events per asset: this step calculates how the end events are distributed among the assets, i.e. what are the assets that users watch till the end
-\item Start events: this step is just an additional filter over the loaded dataset. Only player start events are considered. From the output of this process are executed four additional steps which calculate what are the most used browsers, operative systems, video formats and assets.
+\item Counter events type: this step calculates the number of start and end events; 
+\item End events per asset: this step calculates how the end events are distributed among the assets, i.e., what are the assets that users watch till the end;
+\item Start events: this step is just an additional filter over the loaded dataset. Only player start events are considered. From the output of this process four additional steps are executed to calculate what are the most used browsers, operative systems, video formats and assets.
 \end{itemize} 
 
-The aggregation processes have a rather simple logic as they are composed only of map and reduce operations over the dataset. For completion, we report a pseudocode of the process who calculates the number of player-end event per asset. \\
+The aggregation processes have a rather simple logic as they are composed only of map and reduce operations over the dataset. For completion, we report a pseudocode of the process that calculates the number of player-end events per asset. \\
 
 \begin{algorithm}[H]
 \KwIn{AllEvents input}
@@ -236,7 +194,7 @@ $writeDataOnServingLayer(outputData)$
 \caption{End events per asset aggregation\label{IR}}
 \end{algorithm}
 \bigskip
-This is just an example of how output data are generated, the process itself does not iterate several times on all the datasets, but leverages the distributed power provided by Spark. A dataset is divided in several partitions and distributed on all the working processes which execute the pseudocode above illustrated on a smaller sub dataset, fetching data from other partitions only when needed. By default, the number of partitions of an input file is equal to the number of blocks used by HDFS to store it. An optimization is then, ensuring that each file on HDFS is slightly smaller than an HDFS block size in order to avoid to create partitions with just few data. \\
+This is just an example of how output data are generated, the process itself does not iterate several times on all the datasets, but leverages the distributed power provided by Spark. A dataset is divided into several partitions and distributed on all the working processes that execute the pseudocode above illustrated on a smaller sub dataset, fetching data from other partitions only when needed. By default, the number of partitions of an input file is equal to the number of blocks used by HDFS to store it. Then, an optimization is to ensure that each file on HDFS is slightly smaller than an HDFS block size in order to avoid creating partitions with just few data. \\
 All the branches eventually write data on the serving layer in form of JSON documents. The batch output data model is composed by a field indicating the event type, one for the subject of the aggregation and another one for the aggregated value. For instance an event representing the most used browser is: 
 \begin{listing}
 \begin{minted}[frame=single,
@@ -265,11 +223,11 @@ All the branches eventually write data on the serving layer in form of JSON docu
 \caption[Batch class diagram]{Batch class diagram}
         \label{sparkUML}
 \end{figure}
-Figure \ref{sparkUML} shows a class diagram for the most important classes involved in the aggregation process. An aggregation action has been mapped into a Java object implementing the \textit{Job} interface. In addition, for the jobs using an input dataset to work with, it has been defined an abstract class named \textit{WorkingJob}. Finally, jobs are started through a \textit{JobStarter} object which uses a factory pattern for jobs creation.\\
-The last step of the batch pipeline is the deletion of the real-time data after the completion of a batch aggregation process over a timewindow of data. This is simply obtained by querying the serving layer for the data contained in the current time interval and then deleting the corresponding results. The serving layer implemented with Elasticsearch does not support standard SQL-like delete operations as \textit{DELETE from table WHERE condition}, but it requires the \textit{id} of the documents to be deleted. This process is done in batches in order to improve the throughput of the operations as it would be network expensive sending a delete request for each document. The overall process goes under the name of \textit{delete-by-query}.
+Figure \ref{sparkUML} shows the class diagram for the most important classes involved in the aggregation process. An aggregation action has been mapped into a Java object implementing the \textit{Job} interface. In addition, for the jobs using an input dataset to work with, an abstract class named \textit{WorkingJob} has been defined. Finally, jobs are started through a \textit{JobStarter} object which uses a factory pattern for jobs creation.\\
+The last step of the batch pipeline is the deletion of the real-time data after the completion of a batch aggregation process over a timewindow of data. This is simply obtained by querying the serving layer for the data contained in the current time interval and then deleting the corresponding results. The serving layer implemented with Elasticsearch does not support standard SQL-like delete operations as \textit{DELETE from table WHERE condition}, but it requires the \textit{ids} of the documents to be deleted. This process is done in batches in order to improve the throughput of the operations as it would be network expensive sending a delete request for each document. The overall process goes under the name of \textit{delete-by-query}.
 
 \section{Real time layer}
-Spark topology runs in parallel with the batch layer and propagates data from Kafka into 
+Storm topology runs in parallel with the batch layer and propagates data from Kafka into 
 Elasticsearch. It is a rather simple topology as it computes just a data augmentation step and no aggregation at all.
 \begin{figure}[h]
        \makebox[\textwidth][c]
@@ -280,17 +238,17 @@ Elasticsearch. It is a rather simple topology as it computes just a data augment
         \label{stormTopology}
 \end{figure}
 
-Data are fetched by Kafka spouts that are listening to a topic and as soon they receive a message, they serialize it as a String and propagate it according to the routing policy. These components are implemented using an existing module provided by the official Storm repository. Anyway, as stated also in the code, some modification were made in order to monitor the topology and to fix unexpected behaviours regarding the policy to trigger when an invalid offset is requested (instead of raising an exception, now the spout requests for the earliest offset available for that partition). \\
-Data are then propagated to the next components of the topology, the Filter bolts. The aim of these bolts if just to discard the data we don't need for aggregation. Specifically, all the non-Silverlight events are discarded. Since, into the next step we analyze the user agent of each event, a simple filter function controls the occurrence of that field into the JSON input string received by each Filter bolt. Another option could have been to deserialize the string into a Java object and then check the existence of the user agent field via getter method. Unfortunately, deserializing a JSON string is a time-expensive process and we figured out that checking a substring occurrence is way faster.\\
-The next bolts, as we introduced above, are responsible for user agent analysis. They break a user agent string into a browser and operative system version which are used for the analysis performed by the serving layer. In this step an event is deserialized into a \textit{StormEvent} since we need to modify its internal state. After extracting browser and operative system, these fields are added to the object itself. Another additional field called \textit{counter} is added to the object and its value is initialized to $1$. This is needed by Elasticsearch when merging real-time data with batch ones. \\
-After the user agent analysis, data are serialized into JSON strings by the Serializer bolts. Originally this action was executed by the previous bolts but, while tuning the topology, we discovered a bottleneck in this process and hence it was convenient to separate it from the user agent analysis. Anyway, serializing a \textit{StormEvent} into a JSON String results in a performances improvment when indexing documents on Elasicsearch and moreover, implies a denormalization process of the fields used for aggregation such as the asset name, the video format and the player event type. We will explain the motivation of this choice in the next section.\\
-The final step of the topology is responsible for writing the augmented data into Elasticsearch. As for Kafka spouts, an already existing implementation provided by Elasticsearch was used and modified for monitoring purposes. In order to improve the performances, these components use bulk API for batch indexing: parameters as the number of documents in a bulk, the bulk dimension in bytes and the flushing time are configurable respectively through \textit{es.storm.bolt.flush.entries.size, es.batch.size.bytes} and \textit{topology.tick.tuple.freq.secs} Storm settings. Part of the tuning process involved trying different values for these parameters in order to maximize the throughput of the topology. \\
-Data are propagated from the components to the next ones in a shuffle mode. As we explained in chapter \ref{chap:chapter2}, this is the best distribution policy when no aggregation processes are executed as it allows to spread the load equally among the various components. 
+Data are fetched by Kafka spouts that listen to a topic and at the message receiving, they serialize it as a String and propagate it according to the routing policy. Kafka spouts are implemented using an existing module provided by the official Storm repository. Anyway, as stated also in the code, some modification were made in order to monitor the topology and to fix unexpected behaviours regarding the policy to trigger when an invalid offset is requested (instead of raising an exception, now the spout requests for the earliest offset available for that partition). \\
+Data are then propagated to the next components of the topology, the Filter bolts. The aim of these bolts is just to discard the data we do not need for aggregation. Specifically, all the non-Silverlight events are filtered out. Since into the next step we analyze the user agent of each event, a simple filter function controls the occurrence of that field into the JSON input string received by each Filter bolt. Another option could have been to deserialize the string into a Java object and then check the existence of the user agent field via getter method. Unfortunately, deserializing a JSON string is a time-expensive process and we figured out that checking a substring occurrence is way faster.\\
+The next bolts, as we introduced above, are responsible for the user agent analysis. They break a user agent string into browser and operative system versions which are used for the analysis performed by the serving layer. In this step, an event is deserialized into a \textit{StormEvent} because we need to modify its internal state. After extracting the browser and operative system, these fields are added to the object itself. Another additional field called \textit{counter} is added to the object and its value is initialized to $1$. This is needed by Elasticsearch when merging real-time data with batch ones. \\
+After the user agent analysis, data are serialized into JSON strings by the Serializer bolts. Originally this action was executed by the previous bolts but, while tuning the topology, we discovered a bottleneck in this process and hence it was convenient to separate it from the user agent analysis. Anyway, serializing a \textit{StormEvent} into a JSON String results in a performance improvement when indexing documents on Elasicsearch; moreover, it triggers a denormalization process of the fields used for aggregation, such as the asset name, the video format and the player event type. We will explain the motivation of this choice in the next section.\\
+The final step of the topology is responsible for writing the augmented data into Elasticsearch. As for the Kafka spouts, an already existing implementation provided by Elasticsearch was used and modified for monitoring purposes. In order to improve performance, these components use bulk API for batch indexing. Parameters as the number of documents in a bulk, the bulk dimension in bytes and the flushing time are configurable respectively through \textit{es.storm.bolt.flush.entries.size, es.batch.size.bytes} and \textit{topology.tick.tuple.freq.secs} Storm settings. Part of the tuning process involved trying different values for these parameters in order to maximize the throughput of the topology. \\
+Data are propagated from the components to the next ones in a shuffle mode. As we explained in Chapter \ref{chap:chapter2}, this is the best distribution policy when no aggregation processes are executed as it allows to equally spread the load among the various components. 
 \section{Serving layer}
-As stated in chapter \ref{chap:chapter2}, Elasticsearch provides storage space for documents and the \textit{Lucene} search engine for querying them. Moreover it works with documents in JSON format, making easy to query and aggregate them according to a specific field inside them. \\
-In order to have better performances, Elasticsearch allows to define in advance a mapping model for the documents to be stored, specifying the type of each filed (for instance if a string or an integer) and specific properties such as analyzing policy (make a field available for a full-text search) or whether to index that field or not. Setting such a mapping is very important and normally fields which won't be used should not be indexed at all or made not available for advanced search features.\\
-The mapping used in this implementation defines each fields according to its type (text values mapped with strings, numeric values with integer or long) and all the text values are mapped as \textit{not\_analyzed} hence we don't need full-text search. In order to merge real-time and batch data we need to perform operation on the same field, this is the reason of the data denormalization process executed in the real-time layer. As explained in section \ref{batch-impl}, results produced by the batch layer contain a field for the subject being aggregatd and its value. That field name must match the corresponding one inside the real-time event such that it is possible to sum the \textit{counter} values into a unique result.\\
-Two Elasticsearch index were defined:
+As stated in Chapter \ref{chap:chapter2}, Elasticsearch provides storage space for documents and the \textit{Lucene} search engine for querying them. Moreover, it works with documents in JSON format, making easy to query and aggregate them according to specific fields. \\
+In order to improve performance, Elasticsearch allows to define in advance a mapping model for the documents to be stored, specifying the type of each field (for instance if a string or an integer) and specific properties such as analyzing policy (make a field available for a full-text search) or whether to index that field or not. Setting such a mapping is very important and normally fields which will not be used should not be indexed at all or made not available for advanced search features.\\
+The mapping used in this implementation is straightforward, each fields is mapped with its natural type (text values mapped with strings, numeric values with integer or long) and all the text values are mapped as \textit{not\_analyzed}; hence, we do not need full-text search. In order to merge real-time and batch data, we need to perform operation on the same field, this is the reason of the data denormalization process executed in the real-time layer. As explained in Section \ref{batch-impl}, results produced by the batch layer contain a field for the subject being aggregated and its value. That field name must match the corresponding one inside the real-time event so that it is possible to sum the \textit{counter} values into a unique result.\\
+Two Elasticsearch indices were defined:
 \begin{itemize}
 \item \textit{vimond-realtime}
 \item \textit{vimond-batch}
@@ -306,11 +264,9 @@ and each layer stores its output in the corrisponding type.\\
 \label{kibana-1}
 \end{figure}
 \pagebreak
-Elasticsearch itself provides REST or Java API for making data aggregation or querying. In order to have a user interface we used \textit{KIbana} \footnote{http://www.elastic.co/products/kibana}, a visualization tool included into the Elasticsearch products suite which uses REST API for visualizing and executing operations on data stored in the cluster. Figure \ref{kibana-1} shows part of a Kibana dashboard.\\
+Elasticsearch itself provides REST or Java API for making data aggregation or querying. In order to have a user interface, we used \textit{Kibana}\footnote{http://www.elastic.co/products/kibana}, a visualization tool included into the Elasticsearch products suite that uses REST API for visualizing and executing operations on data stored in the cluster. Figure \ref{kibana-1} shows part of the VimondAnalytics Kibana dashboard.\\
 Under the hood, Kibana sends GET requests with a payloads as the one reported in listing
- \ref{top-assets}. Both types are queried and the aggregation is executed just on the query result. In the listing, data are filtered using the $query$ field from the request, which returns all the documents from \textit{vimond-batch} having \textit{eventName} equals to \textit{"StartEventPerAsset"} and all the ones from \textit{vimond-realtime} having the field \textit{data.playerEvent} equals to \textit{"str-start"}. Elasticsearch defines two families of aggregation: bucketing and metrics. The first just divides data into buckets according to some criterion, while the metrics actually aggregates data inside each bucket. In the example, data are first divided into buckets according to \textit{data.assetName} and then aggregated by \textit{counter}. Data from real-time layer have the counter set to $1$, while the ones from the batch layer to the aggregated value. Summing this field values actually merges the two type of data.
-
-\begin{listing}
+ \ref{top-assets}. Both types are queried and the aggregation is executed just on the query result. In the listing, data are filtered using the $query$ field from the request, which returns all the documents from \textit{vimond-batch} having \textit{eventName} equal to \textit{``StartEventPerAsset"} and all the ones from \textit{vimond-realtime} having the field \textit{data.playerEvent} equal to \textit{``str-start"}. Elasticsearch defines two families of aggregation: bucketing and metrics. The first just divides data into buckets according to some criterion, while the metrics actually aggregates data inside each bucket. In the example related to Listing \ref{top-assets}, data are first divided into buckets according to \textit{data.assetName} and then aggregated by \textit{counter}. Data from real-time layer have the counter set to $1$, while the ones from the batch layer to the aggregated value. Summing these fields values actually merges the two types of data.
 \begin{minted}[frame=single,
                framesep=3mm,
                linenos=true,
@@ -363,6 +319,49 @@ Under the hood, Kibana sends GET requests with a payloads as the one reported in
     }
   }                             
 \end{minted}
-\caption{Start events per asset json request} 
+\captionof{listing}{Start events per asset JSON request} 
 \label{top-assets}
-\end{listing}
+\section{AWS Deploy}
+\label{deploy}
+We have deployed the VimondAnalytics system on a private VPC (virtual private cloud) provided by Amazon Web Services (AWS). We chose AWS since Vimond already uses it for its infrastructures. Moreover, the company providing input data (TV2) runs as well its environments there. Anyway, it is possible to deploy our system  on any cloud provider as it does not use exclusive services of Amazon, but just basic processing and networking resources. A related example is provided by the Hadoop deployment choice: Amazon provides a service called Elastic Map Reduce\footnote{https://aws.amazon.com/elasticmapreduce} that allows to fire up a working Hadoop cluster (including HDFS) hiding all the complexity of tuning and setting it. However, in our system de decided to deploy the Hadoop cluster on separate virtual machines and part of the project effort was to manually tune the settings in order to achieve the best performances for the scenario we considered.\\
+We report below the configuration of the virtual machines used for each layer of VimondAnalytics.
+\begin{itemize}
+\item Data ingestion: \textit{t2.medium} (2 vCPU Intel Xeon up to 3.3 Ghz, 4 Gb RAM,  8 Gb EBS).
+\item EventFetcher: \textit{t2.small} (1 vCPU Intel Xeon up to 3.3 Ghz, 2 Gb RAM,  8 Gb EBS).
+\item Processing layer:
+	\begin{itemize}
+	\item Master node: \textit{m4.large} (2 vCPU Intel Xeon E5-2676 v3 2,4 Ghz, 8 Gb RAM, 8 Gb EBS)
+	\item Slave node \textit{m4.xlarge} (4 vCPU Intel Xeon E5-2676 v3 2,4 Ghz, 16 Gb RAM, 60 Gb EBS)
+	\end{itemize}
+\item Serving layer: \textit{m4.xlarge} (4 vCPU Intel Xeon E5-2676 v3 2,4 Ghz, 16 Gb RAM, 30 Gb EBS)
+\end{itemize}
+The virtual machine sizes choice was driven by their scopes. Processing and serving layers virtual machines deal with a bigger workload than the others, hence they require a more powerful virtual hardware. We empirically checked that, instances less powerful than \textit{m4.xlarge}, resulted in a bottleneck in the CPU in the processing and serving layers.
+The following services were deployed on each specific machine:
+\begin{itemize}
+\item Data ingestion: Kafka broker,  Zookeeper, Exhibitor (Zookeeper monitoring tool);
+\item Event fetcher: one instance of event-fetcher program;
+\item Master node: HDFS Namenode, YARN Resource manager, Storm Nimbus, Oozie;
+\item Slave node: HDFS Datanode, YARN Node manager, Storm Supervisor;
+\item Serving Layer: Elasticsearch.
+\end{itemize}
+
+The default configuration used for a typical execution of the architecture is:
+\begin{itemize}
+\item 1 instance of Data ingestion;
+\item 1 instance of EventFetcher;
+\item 1 instance of Master node;
+\item 2 instance of Slave node;
+\item 1 instance of Serving layer.
+\end{itemize}
+We opted for this configuration in order to minimize the overall cost of the infrastructure altough it is not the optmimal one in terms of scalability and fault tolerance.\\
+Figure \ref{aws-1} shows the machine diagram for the default configuration.
+
+\begin{figure}[h]
+        \centering
+        \includegraphics[width=17cm]{imgs/machine_diagram.pdf}
+\caption[AWS default configuration]{AWS default configuration}
+        \label{aws-1}
+\end{figure}
+
+In order to minimize the number of used virtual machines, the batch and real-time processing layers share the same ones. By properly setting their configuration files, resource starvation problems can be avoided. Spark was not directly deployed on any machine, but its executable libraries must be copied on HDFS in order to be shared among the slave nodes. When a batch job is scheduled, each slave node fetches these libraries in order to execute the job itself.\\
+Every deployed service is executed in supervised mode using \textit{daemontools}\footnote{http://cr.yp.to/daemontools.html} commands suite. This implies each process to start at machine boot time and restart in case of failure of the process itself. Some components of the frameworks used in this implementation are \textit{fail-safe} and require to be executed in supervised mode, which means that in case of their failure, they can be restarted without affecting other parts of the system as they will restore their state from a safe checkpoint.
